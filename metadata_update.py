@@ -94,8 +94,9 @@ query = """
                       dataProcessed,
                       species,
                       associatedPaperDOI,
-                      openneuroPaperDOI
-                      dxStatus
+                      openneuroPaperDOI,
+                      dxStatus,
+                      affirmedConsent
                     }
                 }, 
                 description {
@@ -160,6 +161,7 @@ while True:
         )
         processed_data = "Yes" if dataset_field["metadata"]["dataProcessed"] else "No"
         species = dataset_field["metadata"]["species"]
+        nondefaced_consent = "Yes" if dataset_field["metadata"]["affirmedConsent"] else "No"
         doi_of_paper_associated_with_ds = dataset_field["metadata"]["associatedPaperDOI"]
         doi_of_paper_because_ds_on_openneuro = dataset_field["metadata"]["openneuroPaperDOI"]
         senior_author = format_name(ds["node"]["latestSnapshot"]["description"]["SeniorAuthor"])
@@ -180,6 +182,7 @@ while True:
             longitudinal,
             processed_data,
             species,
+            nondefaced_consent,
             doi_of_paper_associated_with_ds,
             doi_of_paper_because_ds_on_openneuro,
             senior_author,
@@ -216,6 +219,7 @@ header = [
     "longitudinal",
     "processed_data",
     "species",
+    "nondefaced_consent",
     "doi_of_papers_from_source_data_lab",
     "doi_of_paper_published_using_openneuro_dataset",
     "senior_author",
