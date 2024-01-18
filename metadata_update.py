@@ -21,9 +21,9 @@ age_dict = {
     (66, 1000): "66+",
 }
 bool_dict = {True: "yes", False: "no", None: "no"}
-date_arg_format = "%m/%d/%Y"
+date_arg_format = "%Y-%m-%d"
 date_input_format = "%Y-%m-%d"
-date_output_format = "%-m/%-d/%Y"
+date_output_format = "%Y-%m-%d"
 
 headers = {
     "Accept-Encoding": "gzip, deflate, br",
@@ -200,28 +200,28 @@ while True:
     response = response.json()
 
 header = [
-    "Accession Number",
-    "Dataset URL",
-    "Dataset name",
-    "Dataset made public (MM/DD/YYYY)",
-    "Most recent snapshot date (MM/DD/YYYY)",
-    "# of subjects",
-    "Modalities available?",
-    "DX status(es)",
-    "Ages (range)",
-    "Tasks completed?",
-    "# of trials (if applicable)",
-    "Study design",
-    "Domain studied",
-    "Longitudinal?",
-    "Processed data?",
-    "Species?",
-    "DOI of paper associated with DS (from submitter lab)",
-    "DOI of paper because DS on OpenNeuro",
-    "Senior Author (lab that collected data) Last, First",
+    "accession_number",
+    "dataset_url",
+    "dataset_name",
+    "made_public",
+    "most_recent_snapshot",
+    "num_subjects",
+    "modalities",
+    "dx_status",
+    "ages",
+    "tasks",
+    "num_trials",
+    "study_design",
+    "domain_studied",
+    "longitudinal",
+    "processed_data",
+    "species",
+    "doi_of_papers_from_source_data_lab",
+    "doi_of_paper_published_using_openneuro_dataset",
+    "senior_author",
 ]
 df = pd.DataFrame(output, columns=header)
-df = df.set_index("Accession Number")
+df = df.set_index("accession_number")
 df = df.sort_index()
 df = df.groupby(df.index).first()
 df.to_csv('metadata.csv', mode='w+')
