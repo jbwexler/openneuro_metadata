@@ -73,6 +73,17 @@ def format_name(name):
         return new_name
     else:
         return name
+        
+def code_bool(parent, field):
+    if field in parent:
+        if parent[field]:
+            return "Yes"
+        elif parent[field] is False:
+            return "No"
+        elif parent[field] is None:
+            return "n/a"
+    else:
+        return "n/a"
 
 query = """
 {
@@ -96,7 +107,8 @@ query = """
                       associatedPaperDOI,
                       openneuroPaperDOI,
                       dxStatus,
-                      affirmedConsent
+                      affirmedConsent,
+                      affirmedDefaced
                     }
                 }, 
                 description {
@@ -159,9 +171,10 @@ while True:
         longitudinal = (
             "Yes" if dataset_field["metadata"]["studyLongitudinal"] == "Longitudinal" else "No"
         )
-        processed_data = "Yes" if dataset_field["metadata"]["dataProcessed"] else "No"
+        processed_data = code_bool(dataset_field["metadata"],"dataProcessed")
         species = dataset_field["metadata"]["species"]
-        nondefaced_consent = "Yes" if dataset_field["metadata"]["affirmedConsent"] else "No"
+        nondefaced_consent =  code_bool(dataset_field["metadata"],"affirmedConsent")
+        affirmed_defaced = code_bool(dataset_field["metadata"],"affirmedDefaced")
         doi_of_paper_associated_with_ds = dataset_field["metadata"]["associatedPaperDOI"]
         doi_of_paper_because_ds_on_openneuro = dataset_field["metadata"]["openneuroPaperDOI"]
         senior_author = format_name(ds["node"]["latestSnapshot"]["description"]["SeniorAuthor"])
@@ -183,6 +196,7 @@ while True:
             processed_data,
             species,
             nondefaced_consent,
+            affirmed_defaced,
             doi_of_paper_associated_with_ds,
             doi_of_paper_because_ds_on_openneuro,
             senior_author,
@@ -220,6 +234,7 @@ header = [
     "processed_data",
     "species",
     "nondefaced_consent",
+    "affirmed_defaced",
     "doi_of_papers_from_source_data_lab",
     "doi_of_paper_published_using_openneuro_dataset",
     "senior_author",
