@@ -93,10 +93,10 @@ query = """
             id,
             publishDate,
             latestSnapshot {
-                tag, 
+                tag,
+                created,
                 dataset {
                     name, 
-                    publishDate,
                     metadata {
                       trialCount,
                       studyDesign,
@@ -154,7 +154,7 @@ while True:
         dataset_name = dataset_field["name"]
         dataset_made_public = dataset_made_public_datetime.strftime(date_output_format)
         most_recent_snapshot_date = datetime.strptime(
-            dataset_field["publishDate"][:10],
+            ds["node"]["latestSnapshot"]["created"][:10],
             date_input_format,
         ).strftime(date_output_format)
         if summary_field is not None:
