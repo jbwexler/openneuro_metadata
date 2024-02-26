@@ -138,6 +138,8 @@ output = []
 # remember to remove duplicates
 while True:
     for ds in response["data"]["datasets"]["edges"]:
+        if not ds:
+            continue
         dataset_field = ds["node"]["latestSnapshot"]["dataset"]
         summary_field = ds["node"]["latestSnapshot"]["summary"]
         accession_number = ds["node"]["id"]
