@@ -1,5 +1,8 @@
 import requests
 import os
+import sys
+
+dataset = sys.argv[1]
 
 headers = {
     "Accept-Encoding": "gzip, deflate, br",
@@ -19,7 +22,7 @@ query = """
 }
 """.replace("\n", "")
 
-data = '{"query":"query testq{dataset(id: \\"ds000224\\") ' + query + '}"}'
+data = ('{"query":"query testq{dataset(id: \\"%s\\") ' % dataset) + query + '}"}'
 response = requests.post("https://openneuro.org/crn/graphql", headers=headers, data=data)
 response = response.json()
 
