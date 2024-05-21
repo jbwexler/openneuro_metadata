@@ -95,6 +95,7 @@ query = """
             latestSnapshot {
                 tag,
                 created,
+                size,
                 dataset {
                     name, 
                     metadata {
@@ -159,6 +160,10 @@ while True:
             ds["node"]["latestSnapshot"]["created"][:10],
             date_input_format,
         ).strftime(date_output_format)
+        if ds["node"]["latestSnapshot"]["size"]:
+            size_gb = round(ds["node"]["latestSnapshot"]["size"] / (1024**3), 2)
+        else:
+            size_gb = None
         if summary_field is not None:
             number_of_subjects = str(len(summary_field["subjects"]))
             modalities_available = format_modalities(
@@ -202,6 +207,7 @@ while True:
             doi_of_paper_associated_with_ds,
             doi_of_paper_because_ds_on_openneuro,
             senior_author,
+            size_gb
         ]
         line = ["" if x is None else str(x) for x in line_raw]
         output.append(line)
@@ -240,6 +246,7 @@ header = [
     "doi_of_papers_from_source_data_lab",
     "doi_of_paper_published_using_openneuro_dataset",
     "senior_author",
+    "size_gb"
 ]
 df = pd.DataFrame(output, columns=header)
 df = df.set_index("accession_number")
