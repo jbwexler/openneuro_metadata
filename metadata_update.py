@@ -144,10 +144,14 @@ while True:
         dataset_field = ds["node"]["latestSnapshot"]["dataset"]
         summary_field = ds["node"]["latestSnapshot"]["summary"]
         accession_number = ds["node"]["id"]
-
-        dataset_made_public_datetime = datetime.strptime(
-            ds["node"]["publishDate"][:10], date_input_format
-        )
+        
+        try:
+            dataset_made_public_datetime = datetime.strptime(
+                ds["node"]["publishDate"][:10], date_input_format
+            )
+            dataset_made_public = dataset_made_public_datetime.strftime(date_output_format)
+        except TypeError:
+            dataset_made_public_datetime = None
         dataset_url = os.path.join(
             "https://openneuro.org/datasets/",
             accession_number,
@@ -155,7 +159,6 @@ while True:
             ds["node"]["latestSnapshot"]["tag"],
         )
         dataset_name = dataset_field["name"]
-        dataset_made_public = dataset_made_public_datetime.strftime(date_output_format)
         most_recent_snapshot_date = datetime.strptime(
             ds["node"]["latestSnapshot"]["created"][:10],
             date_input_format,
