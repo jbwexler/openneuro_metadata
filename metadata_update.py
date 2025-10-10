@@ -218,6 +218,7 @@ def create_data_dict(in_data: dict) -> dict:
             lambda: round(in_data["node"]["latestSnapshot"]["size"] / (1024**3), 2),
             TypeError,
         ),
+        "dataset_type": in_data["node"]["latestSnapshot"]["description"]["DatasetType"],
     }
 
     return out_data
