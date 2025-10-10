@@ -1,17 +1,15 @@
 import requests
 import os
-from datetime import datetime
 import pandas as pd
+import logging
+import sys
 
-scan_dict = {
-    "anatomical": "anat",
-    "structural": "anat",
-    "functional": "func",
-    "behavioral": "beh",
-    "diffusion": "dwi",
-    "perfusion": "perf",
+
+DTYPES = {
+    "num_subjects": "Int64",
+    "num_trials": "Int64",
 }
-age_dict = {
+AGE_DICT = {
     (0, 10): "0-10",
     (11, 17): "11-17",
     (18, 25): "18-25",
@@ -20,12 +18,7 @@ age_dict = {
     (51, 65): "51-65",
     (66, 1000): "66+",
 }
-bool_dict = {True: "yes", False: "no", None: "no"}
-date_arg_format = "%Y-%m-%d"
-date_input_format = "%Y-%m-%d"
-date_output_format = "%Y-%m-%d"
-
-headers = {
+HEADERS = {
     "Accept-Encoding": "gzip, deflate, br",
     "Content-Type": "application/json",
     "Accept": "application/json",
@@ -34,58 +27,7 @@ headers = {
     "Origin": "https://openneuro.org",
 }
 
-
-def format_modalities(all_modalities):
-    modalities_available_list = []
-    if any(("MRI_" in e for e in all_modalities)):
-        all_modalities.remove("MRI")
-        for m in all_modalities:
-            if "MRI" in m:
-                scan_type = scan_dict[m.split("MRI_", 1)[1].lower()]
-                new_m = "MRI - " + scan_type
-                modalities_available_list.append(new_m)
-            else:
-                modalities_available_list.append(m)
-    else:
-        modalities_available_list = all_modalities
-    return ", ".join(modalities_available_list)
-
-
-def format_ages(raw_age_list):
-    formatted_list = []
-    if raw_age_list:
-        age_list = sorted([x["age"] for x in raw_age_list if x["age"]])
-        for key, value in age_dict.items():
-            if any(x for x in age_list if x >= key[0] and x <= key[1]):
-                formatted_list.append(value)
-        return ", ".join(formatted_list)
-    else:
-        return ""
-
-
-def format_name(name):
-    if not name:
-        return ""
-    elif "," not in name:
-        last = name.split(" ")[-1]
-        first = " ".join(name.split(" ")[0:-1])
-        new_name = last + ", " + first
-        return new_name
-    else:
-        return name
-        
-def code_bool(parent, field):
-    if field in parent:
-        if parent[field]:
-            return "Yes"
-        elif parent[field] is False:
-            return "No"
-        elif parent[field] is None:
-            return "n/a"
-    else:
-        return "n/a"
-
-query = """
+QUERY = """
 {
     edges {
         cursor,
@@ -113,7 +55,8 @@ query = """
                     }
                 }, 
                 description {
-                    SeniorAuthor
+                    SeniorAuthor,
+                    DatasetType
                 },
                 summary {
                     subjects,
@@ -130,131 +73,187 @@ query = """
     }
 }
 """.replace("\n", "")
-data = '{"query":"query testq{datasets ' + query + '}"}'
 
-response = requests.post("https://openneuro.org/crn/graphql", headers=headers, data=data)
-response = response.json()
 
-output = []
-# remember to remove duplicates
-while True:
-    for ds in response["data"]["datasets"]["edges"]:
-        if not ds:
-            continue
-        dataset_field = ds["node"]["latestSnapshot"]["dataset"]
-        summary_field = ds["node"]["latestSnapshot"]["summary"]
-        accession_number = ds["node"]["id"]
-        
+logger = logging.getLogger(__name__)
+
+
+def format_bool(bool_var: bool) -> str | None:
+    if bool_var:
+        return "Yes"
+    elif bool_var is False:
+        return "No"
+    else:
+        return None
+
+
+def format_modalities(all_modalities: list) -> str:
+    if any(("mri_" in e for e in all_modalities)):
+        all_modalities.remove("mri")
+    return ", ".join(all_modalities)
+
+
+def format_ages(raw_age_list: list) -> str | None:
+    formatted_list = []
+    if raw_age_list:
+        age_list = sorted([x["age"] for x in raw_age_list if x["age"]])
+
+        for key, value in AGE_DICT.items():
+            if any(x for x in age_list if x >= key[0] and x <= key[1]):
+                formatted_list.append(value)
+
+        return ", ".join(formatted_list)
+    else:
+        return None
+
+
+def format_name(name: str) -> str | None:
+    if not name:
+        return None
+    elif "," not in name:
+        name_list = name.split(" ")
+        last = name_list[-1]
+        first = " ".join(name_list[:-1])
+        new_name = last + ", " + first
+        return new_name
+    else:
+        return name
+
+
+def handle_error(func, error):
+    """Returns None if the specified error occurs.
+    Otherwise returns output of function."""
+    try:
+        return func()
+    except error:
+        return None
+
+
+def perform_query(next_cur=None) -> dict:
+    """Performs query and outputs response as dict. If next_cur is not provided,
+    gets the first chunk of datasets. Otherwise, gets the next chunk."""
+    if next_cur:
+        query_dict = (
+            f'{{"query": "query testq{{datasets(after: \\"{next_cur}\\") '
+            + QUERY
+            + '}"}'
+        )
+    else:
+        query_dict = '{"query":"query testq{datasets ' + QUERY + '}"}'
+
+    num_attempts = 3
+    for i in range(num_attempts):
         try:
-            dataset_made_public_datetime = datetime.strptime(
-                ds["node"]["publishDate"][:10], date_input_format
+            response = requests.post(
+                "https://openneuro.org/crn/graphql", headers=HEADERS, data=query_dict
             )
-            dataset_made_public = dataset_made_public_datetime.strftime(date_output_format)
-        except TypeError:
-            dataset_made_public_datetime = None
-        dataset_url = os.path.join(
+            return response.json()
+        except requests.exceptions.JSONDecodeError:
+            pass
+
+    logger.error("Request failed %s times: %s" % (num_attempts, response))
+    logger.error("Exiting.")
+    sys.exit(1)
+
+
+def create_data_dict(in_data: dict) -> dict:
+    """Creates a dict containing fields to be outputted for particular dataset."""
+    dataset_field = in_data["node"]["latestSnapshot"]["dataset"]
+    summary_field = in_data["node"]["latestSnapshot"]["summary"]
+    accession_number = in_data["node"]["id"]
+
+    out_data = {
+        "accession_number": accession_number,
+        "dataset_url": os.path.join(
             "https://openneuro.org/datasets/",
             accession_number,
             "versions",
-            ds["node"]["latestSnapshot"]["tag"],
-        )
-        dataset_name = dataset_field["name"]
-        most_recent_snapshot_date = datetime.strptime(
-            ds["node"]["latestSnapshot"]["created"][:10],
-            date_input_format,
-        ).strftime(date_output_format)
-        if ds["node"]["latestSnapshot"]["size"]:
-            size_gb = round(ds["node"]["latestSnapshot"]["size"] / (1024**3), 2)
-        else:
-            size_gb = None
-        if summary_field is not None:
-            number_of_subjects = str(len(summary_field["subjects"]))
-            modalities_available = format_modalities(
+            in_data["node"]["latestSnapshot"]["tag"],
+        ),
+        "dataset_name": dataset_field["name"],
+        "made_public": handle_error(
+            lambda: in_data["node"]["publishDate"][:10],
+            TypeError,
+        ),
+        "most_recent_snapshot": in_data["node"]["latestSnapshot"]["created"][:10],
+        "num_subjects": handle_error(
+            lambda: str(len(summary_field["subjects"])),
+            TypeError,
+        ),
+        "modalities": handle_error(
+            lambda: format_modalities(
                 summary_field["secondaryModalities"] + summary_field["modalities"]
-            )
-            ages = format_ages(summary_field["subjectMetadata"])
-            tasks_completed = ", ".join(summary_field["tasks"])
-        dx_status = dataset_field["metadata"]["dxStatus"]
-        number_of_trials = dataset_field["metadata"]["trialCount"]
-        study_design = dataset_field["metadata"]["studyDesign"]
-        domain_studied = dataset_field["metadata"]["studyDomain"]
-        longitudinal = (
-            "Yes" if dataset_field["metadata"]["studyLongitudinal"] == "Longitudinal" else "No"
-        )
-        processed_data = code_bool(dataset_field["metadata"],"dataProcessed")
-        species = dataset_field["metadata"]["species"]
-        nondefaced_consent =  code_bool(dataset_field["metadata"],"affirmedConsent")
-        affirmed_defaced = code_bool(dataset_field["metadata"],"affirmedDefaced")
-        doi_of_paper_associated_with_ds = dataset_field["metadata"]["associatedPaperDOI"]
-        doi_of_paper_because_ds_on_openneuro = dataset_field["metadata"]["openneuroPaperDOI"]
-        senior_author = format_name(ds["node"]["latestSnapshot"]["description"]["SeniorAuthor"])
-        line_raw = [
-            accession_number,
-            dataset_url,
-            dataset_name,
-            dataset_made_public,
-            most_recent_snapshot_date,
-            number_of_subjects,
-            modalities_available,
-            dx_status,
-            ages,
-            tasks_completed,
-            number_of_trials,
-            study_design,
-            domain_studied,
-            longitudinal,
-            processed_data,
-            species,
-            nondefaced_consent,
-            affirmed_defaced,
-            doi_of_paper_associated_with_ds,
-            doi_of_paper_because_ds_on_openneuro,
-            senior_author,
-            size_gb
-        ]
-        line = ["" if x is None else str(x) for x in line_raw]
-        output.append(line)
+            ),
+            TypeError,
+        ),
+        "dx_status": dataset_field["metadata"]["dxStatus"],
+        "ages": handle_error(
+            lambda: format_ages(summary_field["subjectMetadata"]),
+            TypeError,
+        ),
+        "tasks": handle_error(
+            lambda: ", ".join(summary_field["tasks"]),
+            TypeError,
+        ),
+        "num_trials": dataset_field["metadata"]["trialCount"],
+        "study_design": dataset_field["metadata"]["studyDesign"],
+        "domain_studied": dataset_field["metadata"]["studyDomain"],
+        "longitudinal": format_bool(
+            dataset_field["metadata"]["studyLongitudinal"] == "Longitudinal"
+        ),
+        "processed_data": format_bool(dataset_field["metadata"]["dataProcessed"]),
+        "species": dataset_field["metadata"]["species"],
+        "nondefaced_consent": format_bool(dataset_field["metadata"]["affirmedConsent"]),
+        "affirmed_defaced": format_bool(dataset_field["metadata"]["affirmedDefaced"]),
+        "doi_of_papers_from_source_data_lab": dataset_field["metadata"][
+            "associatedPaperDOI"
+        ],
+        "doi_of_paper_published_using_openneuro_dataset": dataset_field["metadata"][
+            "openneuroPaperDOI"
+        ],
+        "senior_author": format_name(
+            in_data["node"]["latestSnapshot"]["description"]["SeniorAuthor"]
+        ),
+        "size_gb": handle_error(
+            lambda: round(in_data["node"]["latestSnapshot"]["size"] / (1024**3), 2),
+            TypeError,
+        ),
+    }
 
-    if len(response["data"]["datasets"]["edges"]) < 25:
-        break
-
-    next_cur = ds["cursor"]
-    data = f'{{"query": "query testq{{datasets(after: \\"{next_cur}\\") ' + query + '}"}'
-    response = requests.post(
-        "https://openneuro.org/crn/graphql",
-        headers=headers,
-        data=data,
-    )
-    response = response.json()
-
-header = [
-    "accession_number",
-    "dataset_url",
-    "dataset_name",
-    "made_public",
-    "most_recent_snapshot",
-    "num_subjects",
-    "modalities",
-    "dx_status",
-    "ages",
-    "tasks",
-    "num_trials",
-    "study_design",
-    "domain_studied",
-    "longitudinal",
-    "processed_data",
-    "species",
-    "nondefaced_consent",
-    "affirmed_defaced",
-    "doi_of_papers_from_source_data_lab",
-    "doi_of_paper_published_using_openneuro_dataset",
-    "senior_author",
-    "size_gb"
-]
-df = pd.DataFrame(output, columns=header)
-df = df.set_index("accession_number")
-df = df.sort_index()
-df = df.groupby(df.index).first()
-df.to_csv('metadata.csv', mode='w+')
+    return out_data
 
 
+def main():
+    logging.basicConfig()
+
+    # Initial query
+    response = perform_query()
+
+    output = []
+    while True:
+        ds_data_list = response["data"]["datasets"]["edges"]
+
+        for ds_data in ds_data_list:
+            if not ds_data:
+                continue
+
+            row = create_data_dict(ds_data)
+            output.append(row)
+
+        # A response with < 25 datasets implies last query
+        if len(ds_data_list) < 25:
+            break
+
+        # Next query
+        response = perform_query(next_cur=ds_data_list[-1]["cursor"])
+
+    df = pd.DataFrame(output)
+    df = df.astype(dtype=DTYPES)
+    df = df.set_index("accession_number")
+    df = df.sort_index()
+    df = df.groupby(df.index).first()  # Remove rows with duplicated accession numbers
+    df.to_csv("metadata.csv", mode="w+")
+
+
+if __name__ == "__main__":
+    main()
