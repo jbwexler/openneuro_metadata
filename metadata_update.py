@@ -13,6 +13,7 @@ from operator import itemgetter
 DTYPES = {
     "num_subjects": "Int64",
     "num_trials": "Int64",
+    "validation_error_count": "Int64",
 }
 AGE_DICT = {
     (0, 10): "0-10",
@@ -71,6 +72,12 @@ query DatasetsWithLatestSnapshots($count: Int, $after: String) {
             }
             tasks
             dataProcessed
+            validatorMetadata {
+              version
+            }
+          }
+          validation {
+            errors
           }
         }
       }
@@ -232,6 +239,12 @@ def create_metadata_dict(in_data: dict) -> dict:
             lambda: round(in_data["node"]["latestSnapshot"]["size"] / (1024**3), 2),
         ),
         "dataset_type": in_data["node"]["latestSnapshot"]["description"]["DatasetType"],
+        "validation_error_count": handle_error(
+            lambda: in_data.get("node")["latestSnapshot"]["validation"]["errors"],
+        ),
+        "validator_version": handle_error(
+            lambda: summary_field["validatorMetadata"]["version"],
+        ),
     }
 
     return out_data
